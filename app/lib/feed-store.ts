@@ -18,17 +18,30 @@ const globalStore = globalThis as typeof globalThis & { stormeyeFeedStore?: Stor
 const state = globalStore.stormeyeFeedStore ??= {};
 const dataDirectory = process.env.STORMEYE_DATA_DIR ?? path.join(process.env.VERCEL ? os.tmpdir() : process.cwd(), ".stormeye");
 const cachePath = path.join(dataDirectory, "feeds.json");
+const bundledSnapshotPath = path.join(process.cwd(), "data", "feeds.snapshot.json");
+
+function isValidSnapshot(value: unknown): value is { version: 1; data: FeedResponse } {
+  if (!value || typeof value !== "object") return false;
+  const saved = value as { version?: unknown; data?: Partial<FeedResponse> };
+  return saved.version === 1
+    && Array.isArray(saved.data?.events)
+    && Array.isArray(saved.data?.sourceHealth)
+    && typeof saved.data?.checkedAt === "string"
+    && Boolean(saved.data.checkedAt);
+}
+
+async function loadSnapshot(filePath: string): Promise<FeedResponse | undefined> {
+  try {
+    const saved = JSON.parse(await readFile(filePath, "utf8"));
+    return isValidSnapshot(saved) ? saved.data : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 async function initialize() {
   state.initialized ??= (async () => {
-    try {
-      const saved = JSON.parse(await readFile(cachePath, "utf8"));
-      if (saved.version === 1 && Array.isArray(saved.data?.events) && Array.isArray(saved.data?.sourceHealth) && saved.data.checkedAt) {
-        state.snapshot = saved.data as FeedResponse;
-      }
-    } catch {
-      // The first run or a damaged cache is recovered by fetching the sources.
-    }
+    state.snapshot = await loadSnapshot(cachePath) ?? await loadSnapshot(bundledSnapshotPath);
   })();
   await state.initialized;
 }

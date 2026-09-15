@@ -65,6 +65,8 @@ https://qiuy6797-bot.github.io/StormEyeAl-Global-AI-Powered-Incident-Monitoring-
 
 GitHub Pages 是静态托管。页面中的“刷新快照”只会重新读取最近一次发布的数据，不会在浏览器中现场抓取信源。
 
+仓库内的 `data/feeds.snapshot.json` 是首次发布或信源暂时受限时使用的可核验快照；后续构建会优先恢复最近一次 Pages 发布的数据。
+
 ## 数据更新与可信边界
 
 每次静态构建都会调用 `/data/feeds.json` 的构建期 Route Handler，采集信源并生成快照。GitHub Actions 的 `0 0 * * *` 计划为 UTC 00:00，即北京时间 08:00；推送代码和手动运行工作流也会触发构建。构建前会尝试恢复上一次已发布的快照，以便部分信源短暂不可用时保留有效期内的数据。

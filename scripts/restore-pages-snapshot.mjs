@@ -14,7 +14,7 @@ try {
   });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const data = await response.json();
-  if (!Array.isArray(data.events) || !Array.isArray(data.sourceHealth) || !data.checkedAt) {
+  if (!Array.isArray(data.events) || !data.events.length || !Array.isArray(data.sourceHealth) || !data.checkedAt) {
     throw new Error("Invalid snapshot format");
   }
   await mkdir(".stormeye", { recursive: true });
