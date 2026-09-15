@@ -140,7 +140,12 @@ async function translateText(value: string): Promise<Translation | undefined> {
 export function cachedTranslations(event: FeedEvent): FeedEvent {
   const title = event.sourceType !== "代码" ? state.cache.get(keyFor(event.title)) : undefined;
   const summary = state.cache.get(keyFor(event.summary));
-  return { ...event, titleZh: title?.text, summaryZh: summary?.text, translationProvider: title?.provider ?? summary?.provider };
+  return {
+    ...event,
+    titleZh: title?.text ?? event.titleZh,
+    summaryZh: summary?.text ?? event.summaryZh,
+    translationProvider: title?.provider ?? summary?.provider ?? event.translationProvider,
+  };
 }
 
 export async function translateEvents(events: FeedEvent[]): Promise<FeedEvent[]> {

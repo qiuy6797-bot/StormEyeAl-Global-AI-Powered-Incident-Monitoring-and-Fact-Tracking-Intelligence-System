@@ -59,7 +59,7 @@
 
 ## FeedResponse
 
-`GET /api/feeds` 和 `POST /api/feeds` 返回：
+静态构建生成的 `/data/feeds.json` 返回：
 
 ```ts
 type FeedResponse = {
@@ -74,7 +74,7 @@ type FeedResponse = {
 };
 ```
 
-`GET` 遵循快照和北京时间日更边界；`POST` 用于手动刷新，但服务端仍会限制短时间重复刷新。`stale: true` 时，页面应明确显示数据可能包含历史快照。
+该文件由 GitHub Actions 构建期 Route Handler 生成，浏览器只读取最近一次发布的静态快照。`stale: true` 时，页面应明确显示数据可能包含历史条目。推送 `main`、手动运行工作流或北京时间约 08:00 的计划任务会生成新版本。
 
 ## 修改约定
 

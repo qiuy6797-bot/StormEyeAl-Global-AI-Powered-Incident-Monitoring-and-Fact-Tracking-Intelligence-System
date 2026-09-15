@@ -33,10 +33,11 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { APP_NAME, DAILY_SYNC_HOUR } from "../lib/config";
 import { seedSourceHealth } from "../lib/seed";
 import { needsChineseTranslation } from "../lib/language";
+import { feedSnapshotPath } from "../lib/site";
 import type { Confidence, EventKind, FeedEvent, FeedResponse, Industry, SourceHealth } from "../lib/types";
 
 const kindFilters: Array<{ key: "全部" | EventKind; label: string }> = [
@@ -176,7 +177,7 @@ function TranslationLine({ value, status, provider, title = false }: {
   return (
     <div className={`translation-line ${title ? "translation-title" : ""} ${value ? "" : "translation-pending"}`} lang="zh-CN">
       <span className="translation-label" title={provider ? `机器翻译 · ${provider} · 以原文为准` : "机器翻译"}>{value ? "中文 · 机器翻译" : "中文"}</span>
-      <p>{value || (status === "unavailable" || status === "partial" ? "中文翻译暂不可用，请稍后刷新重试。" : "正在翻译…")}</p>
+      <p>{value || (status === "unavailable" || status === "partial" ? "中文翻译暂未生成，请以原文为准。" : "正在读取译文…")}</p>
     </div>
   );
 }
@@ -306,12 +307,10 @@ export default function StormEyeDashboard() {
   const [clock, setClock] = useState(new Date());
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const [page, setPage] = useState(1);
-  const translationAttempts = useRef(new Set<string>());
-
   const loadFeeds = async (force = false) => {
     setLoading(true);
     try {
-      const response = await fetch("/api/feeds", { method: force ? "POST" : "GET", cache: "no-store" });
+      const response = await fetch(feedSnapshotPath, { cache: force ? "reload" : "no-store" });
       if (!response.ok) throw new Error("feed request failed");
       const data = (await response.json()) as FeedResponse;
       setEvents(data.events);
@@ -321,11 +320,10 @@ export default function StormEyeDashboard() {
       setLive(data.live);
       setStale(data.stale);
       setMessage(data.message ?? "");
-      translationAttempts.current.clear();
     } catch {
       setLive(false);
       setStale(true);
-      setMessage("暂时无法连接信源，请稍后重试。");
+      setMessage("静态情报快照暂时无法读取，请刷新页面重试。");
     } finally {
       setLoading(false);
     }
@@ -391,38 +389,6 @@ export default function StormEyeDashboard() {
   const visibleEvents = filteredEvents.slice((currentPage - 1) * 10, currentPage * 10);
   useEffect(() => { setPage(1); }, [activeFilter, activeIndustry, query, showSavedOnly, sortMode]);
 
-  const requestTranslations = useCallback(async (items: FeedEvent[]) => {
-    const pending = items.filter((event) =>
-      !translationAttempts.current.has(event.id)
-      && ((event.sourceType !== "代码" && needsChineseTranslation(event.title) && !event.titleZh)
-        || (needsChineseTranslation(event.summary) && !event.summaryZh)),
-    ).slice(0, 4);
-    if (!pending.length) return;
-    pending.forEach((event) => translationAttempts.current.add(event.id));
-    try {
-      const response = await fetch("/api/translations", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: pending.map((event) => event.id) }),
-        signal: AbortSignal.timeout(55000),
-      });
-      if (!response.ok) throw new Error("Translation request failed");
-      const data = await response.json() as { translations: Array<Pick<FeedEvent, "id" | "titleZh" | "summaryZh" | "translationProvider" | "translationStatus">> };
-      setEvents((current) => current.map((event) => {
-        const translated = data.translations.find((item) => item.id === event.id);
-        return translated ? { ...event, ...translated }
-          : pending.some((item) => item.id === event.id) ? { ...event, translationStatus: "unavailable" } : event;
-      }));
-    } catch {
-      setEvents((current) => current.map((event) => pending.some((item) => item.id === event.id)
-        ? { ...event, translationStatus: "unavailable" } : event));
-    }
-  }, []);
-
-  useEffect(() => {
-    const selected = selectedEvent && events.find((event) => event.id === selectedEvent.id);
-    void requestTranslations(selected ? [selected, ...visibleEvents] : visibleEvents);
-  }, [events, visibleEvents, selectedEvent, requestTranslations]);
-
   const stats = useMemo(() => ({
     tracked: events.length,
     highImpact: events.filter((event) => event.impact === "高").length,
@@ -474,7 +440,7 @@ export default function StormEyeDashboard() {
               {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
             </button>
           </div>
-          <div className="live-pulse"><span className="live-dot" />{!sidebarCollapsed && <span>{live ? "实时信号" : "等待信号"}</span>}{!sidebarCollapsed && <span className="live-counter">{events.length}</span>}</div>
+          <div className="live-pulse"><span className="live-dot" />{!sidebarCollapsed && <span>{live ? "静态快照" : "等待快照"}</span>}{!sidebarCollapsed && <span className="live-counter">{events.length}</span>}</div>
           <nav className="primary-nav" aria-label="主导航">
             <span className="nav-label">{!sidebarCollapsed && "工作台"}</span>
             {navItems.map(({ label, icon: Icon }) => <button key={label} className={`nav-item ${activeNav === label ? "active" : ""}`} title={label} onClick={() => activateNav(label)}><Icon size={17} />{!sidebarCollapsed && <span>{label}</span>}{!sidebarCollapsed && activeNav === label && <span className="nav-active-dot" />}</button>)}
@@ -487,7 +453,7 @@ export default function StormEyeDashboard() {
           </nav>
           <div className="sidebar-bottom">
             <button className="operator-card" onClick={() => { setSettingsOpen(true); setHelpOpen(false); }}><div className="operator-avatar">LH</div>{!sidebarCollapsed && <div className="operator-copy"><strong>情报观察员</strong><span>个人工作台</span></div>}{!sidebarCollapsed && <ChevronDown size={14} className="operator-chevron" />}</button>
-            {!sidebarCollapsed && <div className="system-note"><span className="system-note-dot" /><span>摄取管线 {stale ? "需关注" : "运行正常"}</span><span className="system-version">v0.2</span></div>}
+            {!sidebarCollapsed && <div className="system-note"><span className="system-note-dot" /><span>静态发布 {stale ? "需关注" : "运行正常"}</span><span className="system-version">v0.2</span></div>}
           </div>
         </div>
       </aside>
@@ -500,8 +466,8 @@ export default function StormEyeDashboard() {
 
         <div className="content">
           <div className="status-strip">
-            <div className="status-primary"><span className={`status-dot ${stale ? "warning" : ""}`} /><strong>{live ? "实时信源已连接" : "等待首次同步"}</strong><span className="status-separator">/</span><span>最近同步 {formatSyncTime(generatedAt)}</span></div>
-            <div className="status-secondary"><span><Zap size={13} />{onlineSources} 个信源在线</span><span className="status-separator">·</span><span>北京时间 UTC+8</span><span className="status-separator">·</span><span>{autoSync ? `下次日更 ${formatNextSync(clock)}` : "自动日更已暂停"}</span></div>
+            <div className="status-primary"><span className={`status-dot ${stale ? "warning" : ""}`} /><strong>{live ? "静态快照已载入" : "等待快照"}</strong><span className="status-separator">/</span><span>最近发布 {formatSyncTime(generatedAt)}</span></div>
+            <div className="status-secondary"><span><Zap size={13} />{onlineSources} 个信源在线</span><span className="status-separator">·</span><span>{autoSync ? "页面自动检查已开启" : "页面自动检查已暂停"}</span><span className="status-separator">·</span><span>下次发布约 {formatNextSync(clock)}</span></div>
           </div>
           {message && <div className={`notice-strip ${stale ? "warning" : ""}`}><ShieldCheck size={14} /><span>{message}</span><button onClick={() => setMessage("")} aria-label="关闭提示"><X size={13} /></button></div>}
 
@@ -513,12 +479,12 @@ export default function StormEyeDashboard() {
 
           <section className="workspace-grid">
             <div className="feed-column">
-              <div className="section-heading-row" id="event-stream"><div><div className="section-kicker">EVENT STREAM</div><div className="heading-with-count"><h2>事件流</h2><span className="heading-count">{filteredEvents.length.toString().padStart(2, "0")}</span></div></div><div className="heading-actions"><button className={`ghost-button ${timelineOpen ? "active-control" : ""}`} onClick={() => setTimelineOpen((value) => !value)} aria-expanded={timelineOpen}><ListFilter size={14} /><span>{sortMode}</span><ChevronDown size={13} /></button>{timelineOpen && <div className="control-popover timeline-popover"><span className="popover-title">事件排序</span>{(["最新", "影响", "可信"] as const).map((mode) => <button key={mode} className={`popover-option ${sortMode === mode ? "selected" : ""}`} onClick={() => { setSortMode(mode); setTimelineOpen(false); }}><span>{mode === "最新" ? "最新发生" : mode === "影响" ? "影响优先" : "可信优先"}</span>{sortMode === mode && <Check size={14} />}</button>)}</div>}<button className="refresh-button" onClick={() => void loadFeeds(true)} disabled={loading}><RefreshCw size={14} className={loading ? "spin" : ""} /><span>{loading ? "同步中" : "刷新"}</span></button></div></div>
+              <div className="section-heading-row" id="event-stream"><div><div className="section-kicker">EVENT STREAM</div><div className="heading-with-count"><h2>事件流</h2><span className="heading-count">{filteredEvents.length.toString().padStart(2, "0")}</span></div></div><div className="heading-actions"><button className={`ghost-button ${timelineOpen ? "active-control" : ""}`} onClick={() => setTimelineOpen((value) => !value)} aria-expanded={timelineOpen}><ListFilter size={14} /><span>{sortMode}</span><ChevronDown size={13} /></button>{timelineOpen && <div className="control-popover timeline-popover"><span className="popover-title">事件排序</span>{(["最新", "影响", "可信"] as const).map((mode) => <button key={mode} className={`popover-option ${sortMode === mode ? "selected" : ""}`} onClick={() => { setSortMode(mode); setTimelineOpen(false); }}><span>{mode === "最新" ? "最新发生" : mode === "影响" ? "影响优先" : "可信优先"}</span>{sortMode === mode && <Check size={14} />}</button>)}</div>}<button className="refresh-button" onClick={() => void loadFeeds(true)} disabled={loading}><RefreshCw size={14} className={loading ? "spin" : ""} /><span>{loading ? "读取中" : "刷新快照"}</span></button></div></div>
               <div className="feed-toolbar"><div className="filter-tabs" role="tablist" aria-label="事件类型">{kindFilters.map((filter) => <button key={filter.key} role="tab" aria-selected={activeFilter === filter.key} className={`filter-tab ${activeFilter === filter.key ? "active" : ""}`} onClick={() => setActiveFilter(filter.key)}>{filter.label}</button>)}</div><label className="search-box"><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索事件、信源或标签" aria-label="搜索事件、信源或标签" />{query && <button className="search-clear" onClick={() => setQuery("")} aria-label="清除搜索"><X size={14} /></button>}</label></div>
               <div className="industry-toolbar"><div className="industry-toolbar-title"><Layers3 size={13} /><span>按行业观察</span></div><div className="industry-tabs" role="tablist" aria-label="行业分类">{industryFilters.map((filter) => <button key={filter.key} role="tab" aria-selected={activeIndustry === filter.key} className={`industry-tab ${activeIndustry === filter.key ? "active" : ""}`} onClick={() => { setActiveIndustry(filter.key); setShowSavedOnly(false); }}>{filter.label}</button>)}</div></div>
               <div className="industry-snapshot"><span className="industry-snapshot-label">行业脉搏</span>{industrySnapshot.slice(0, 6).map((item) => <button key={item.industry} className={`industry-snapshot-chip ${activeIndustry === item.industry ? "active" : ""}`} onClick={() => { setActiveIndustry(item.industry); setShowSavedOnly(false); }} title={`查看${item.industry}事件`}><span>{item.label}</span><b>{item.count}</b></button>)}</div>
               {(showSavedOnly || activeIndustry !== "全部" || activeFilter !== "全部" || sortMode !== "最新" || query) && <div className="active-filter-summary"><span>当前视图：{showSavedOnly ? " 我的收藏" : activeIndustry !== "全部" ? ` ${activeIndustry}` : activeFilter !== "全部" ? ` ${activeFilter}` : " 全部事件"}{sortMode !== "最新" ? ` · ${sortMode}优先` : ""}{query ? ` · 搜索“${query}”` : ""}</span><button onClick={clearView}>清除视图<X size={12} /></button></div>}
-              <div className="event-list">{visibleEvents.length ? visibleEvents.map((event) => <EventCard key={event.id} event={event} saved={savedIds.includes(event.id)} onOpen={() => setSelectedEvent(event)} onSave={() => setSavedIds((current) => current.includes(event.id) ? current.filter((item) => item !== event.id) : [...current, event.id])} />) : <div className="empty-state"><Search size={18} /><strong>{events.length ? "没有匹配的事件" : "等待信源同步"}</strong><span>{events.length ? "换个关键词，或者清除当前筛选。" : "点击右上角刷新，开始采集公开信源。"}</span>{events.length === 0 && <button className="refresh-button" onClick={() => void loadFeeds(true)} disabled={loading}><RefreshCw size={14} className={loading ? "spin" : ""} />立即同步</button>}</div>}</div>
+              <div className="event-list">{visibleEvents.length ? visibleEvents.map((event) => <EventCard key={event.id} event={event} saved={savedIds.includes(event.id)} onOpen={() => setSelectedEvent(event)} onSave={() => setSavedIds((current) => current.includes(event.id) ? current.filter((item) => item !== event.id) : [...current, event.id])} />) : <div className="empty-state"><Search size={18} /><strong>{events.length ? "没有匹配的事件" : "等待静态快照"}</strong><span>{events.length ? "换个关键词，或者清除当前筛选。" : "点击刷新快照读取最新发布内容。"}</span>{events.length === 0 && <button className="refresh-button" onClick={() => void loadFeeds(true)} disabled={loading}><RefreshCw size={14} className={loading ? "spin" : ""} />读取快照</button>}</div>}</div>
               {filteredEvents.length > 10 && <nav className="event-pagination" aria-label="事件分页"><span>共 {filteredEvents.length} 条事件</span><div><button className="icon-button" aria-label="上一页" title="上一页" disabled={currentPage === 1} onClick={() => { setPage(currentPage - 1); document.getElementById("event-stream")?.scrollIntoView({ behavior: "smooth" }); }}><ChevronLeft size={18} /></button><span>{currentPage} / {pageCount}</span><button className="icon-button" aria-label="下一页" title="下一页" disabled={currentPage === pageCount} onClick={() => { setPage(currentPage + 1); document.getElementById("event-stream")?.scrollIntoView({ behavior: "smooth" }); }}><ChevronRight size={18} /></button></div></nav>}
             </div>
 
@@ -535,11 +501,11 @@ export default function StormEyeDashboard() {
 
       {selectedEvent && <div className="modal-backdrop" onClick={() => setSelectedEvent(null)}><div className="event-modal" role="dialog" aria-modal="true" aria-label="事件详情" onClick={(event) => event.stopPropagation()}><div className="modal-accent" /><div className="modal-header"><div className="event-breadcrumb"><span className={`kind-dot ${kindClass(selectedEvent.kind)}`} /><span className={`kind-label ${kindClass(selectedEvent.kind)}`}>{selectedEvent.kind}</span><span className="dot-divider">·</span><span>{selectedEvent.source}</span></div><button className="icon-button" onClick={() => setSelectedEvent(null)} aria-label="关闭详情" title="关闭详情"><X size={17} /></button></div><EventContent event={events.find((event) => event.id === selectedEvent.id) ?? selectedEvent} detail /><div className="modal-facts"><div><span>事实状态</span><strong>{selectedEvent.confidence}</strong></div><div><span>影响等级</span><strong>{selectedEvent.impact}影响</strong></div><div><span>行业分类</span><strong>{selectedEvent.industry}</strong></div><div><span>发布时间</span><strong>{formatDateTime(selectedEvent.publishedAt)}</strong></div></div><div className="modal-tags">{selectedEvent.tags.map((tag) => <span key={tag} className="event-tag">{tag}</span>)}</div><div className="modal-footer"><span className="modal-note"><ShieldCheck size={14} />机器译文仅供参考，事实以原始信源为准</span><a href={selectedEvent.sourceUrl} target="_blank" rel="noreferrer" className="source-link">查看原始信源<ExternalLink size={14} /></a></div></div></div>}
 
-      {helpOpen && <div className="modal-backdrop" onClick={() => setHelpOpen(false)}><div className="utility-modal help-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}><div className="modal-accent" /><div className="utility-modal-header"><div><div className="section-kicker">QUICK GUIDE</div><h2>怎么用 StormEye</h2></div><button className="icon-button" onClick={() => setHelpOpen(false)} aria-label="关闭帮助" title="关闭帮助"><X size={17} /></button></div><div className="guide-list"><div><strong>1</strong><span>点事件卡片查看摘要、事实状态和原始信源。</span></div><div><strong>2</strong><span>用行业筛选观察基础模型、机器人、金融、能源等赛道。</span></div><div><strong>3</strong><span>收藏重要事件，左侧“我的收藏”只保留你的关注项。</span></div><div><strong>4</strong><span>设置可切换深色模式、字号和北京时间每日 08:00 日更。</span></div></div><div className="utility-modal-footer"><ShieldCheck size={14} /><span>事实状态是公开信源的交叉结果，不替代人工判断。</span></div></div></div>}
+      {helpOpen && <div className="modal-backdrop" onClick={() => setHelpOpen(false)}><div className="utility-modal help-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}><div className="modal-accent" /><div className="utility-modal-header"><div><div className="section-kicker">QUICK GUIDE</div><h2>怎么用 StormEye</h2></div><button className="icon-button" onClick={() => setHelpOpen(false)} aria-label="关闭帮助" title="关闭帮助"><X size={17} /></button></div><div className="guide-list"><div><strong>1</strong><span>点事件卡片查看摘要、事实状态和原始信源。</span></div><div><strong>2</strong><span>用行业筛选观察基础模型、机器人、金融、能源等赛道。</span></div><div><strong>3</strong><span>收藏重要事件，左侧“我的收藏”只保留你的关注项。</span></div><div><strong>4</strong><span>设置可切换深色模式、字号和静态快照自动检查。</span></div></div><div className="utility-modal-footer"><ShieldCheck size={14} /><span>事实状态是公开信源的交叉结果，不替代人工判断。</span></div></div></div>}
 
       {briefOpen && <div className="modal-backdrop" onClick={() => setBriefOpen(false)}><div className="utility-modal brief-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}><div className="modal-accent" /><div className="utility-modal-header"><div><div className="section-kicker">DAILY BRIEF · {formatSyncTime(generatedAt)}</div><h2>今天的风向</h2></div><button className="icon-button" onClick={() => setBriefOpen(false)} aria-label="关闭简报" title="关闭简报"><X size={17} /></button></div><p className="brief-modal-lead">Agent 正在从“会回答”走向“能交付”。今天值得追踪的，不只是模型发布，而是谁把上下文、工具权限和失败恢复真正做成了产品。</p><div className="brief-highlights">{[["01", "Agent 工程化", "运行时、评测和可观测性正在成为落地差异。"], ["02", "推理成本", "每一个 token 都开始进入产品经理和财务的视野。"], ["03", "可信信息", "多源交叉与原始信源，比转发速度更值得下注。"]].map(([index, title, copy]) => <div key={index}><span>{index}</span><strong>{title}</strong><p>{copy}</p></div>)}</div></div></div>}
 
-      {settingsOpen && <div className="modal-backdrop" onClick={() => setSettingsOpen(false)}><div className="utility-modal settings-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}><div className="modal-accent" /><div className="utility-modal-header"><div><div className="section-kicker">WORKSPACE SETTINGS</div><h2>工作台设置</h2></div><button className="icon-button" onClick={() => setSettingsOpen(false)} aria-label="关闭设置" title="关闭设置"><X size={17} /></button></div><div className="settings-section"><div className="settings-label"><span className="settings-label-icon"><Sun size={15} /></span><div><strong>外观主题</strong><span>选择你更舒服的观察环境</span></div></div><div className="segmented-control"><button className={theme === "light" ? "selected" : ""} onClick={() => setTheme("light")}><Sun size={14} />浅色</button><button className={theme === "dark" ? "selected" : ""} onClick={() => setTheme("dark")}><Moon size={14} />深色</button></div></div><div className="settings-section"><div className="settings-label"><span className="settings-label-icon"><Type size={15} /></span><div><strong>阅读字号</strong><span>适合长时间浏览事件流</span></div></div><div className="segmented-control"><button className={fontScale === "standard" ? "selected" : ""} onClick={() => setFontScale("standard")}>标准</button><button className={fontScale === "large" ? "selected" : ""} onClick={() => setFontScale("large")}>舒适</button></div></div><div className="settings-section sync-setting"><div className="settings-label"><span className="settings-label-icon"><RefreshCw size={15} /></span><div><strong>每日更新</strong><span>北京时间自动刷新公开信源</span></div></div><label className="switch-row"><span>{autoSync ? "已开启" : "已暂停"}</span><button className={`switch ${autoSync ? "on" : ""}`} onClick={() => setAutoSync((value) => !value)} role="switch" aria-checked={autoSync} aria-label="切换每日更新"><span /></button></label><div className="next-sync-note"><Clock3 size={13} />默认每天 08:00 · 下次自动更新：{autoSync ? formatNextSync(clock) : "已暂停"}</div></div><div className="utility-modal-footer"><Settings size={14} /><span>设置会保存在本机浏览器中，刷新页面后仍然有效。</span></div></div></div>}
+      {settingsOpen && <div className="modal-backdrop" onClick={() => setSettingsOpen(false)}><div className="utility-modal settings-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}><div className="modal-accent" /><div className="utility-modal-header"><div><div className="section-kicker">WORKSPACE SETTINGS</div><h2>工作台设置</h2></div><button className="icon-button" onClick={() => setSettingsOpen(false)} aria-label="关闭设置" title="关闭设置"><X size={17} /></button></div><div className="settings-section"><div className="settings-label"><span className="settings-label-icon"><Sun size={15} /></span><div><strong>外观主题</strong><span>选择你更舒服的观察环境</span></div></div><div className="segmented-control"><button className={theme === "light" ? "selected" : ""} onClick={() => setTheme("light")}><Sun size={14} />浅色</button><button className={theme === "dark" ? "selected" : ""} onClick={() => setTheme("dark")}><Moon size={14} />深色</button></div></div><div className="settings-section"><div className="settings-label"><span className="settings-label-icon"><Type size={15} /></span><div><strong>阅读字号</strong><span>适合长时间浏览事件流</span></div></div><div className="segmented-control"><button className={fontScale === "standard" ? "selected" : ""} onClick={() => setFontScale("standard")}>标准</button><button className={fontScale === "large" ? "selected" : ""} onClick={() => setFontScale("large")}>舒适</button></div></div><div className="settings-section sync-setting"><div className="settings-label"><span className="settings-label-icon"><RefreshCw size={15} /></span><div><strong>快照自动检查</strong><span>页面打开时定时读取已发布内容</span></div></div><label className="switch-row"><span>{autoSync ? "已开启" : "已暂停"}</span><button className={`switch ${autoSync ? "on" : ""}`} onClick={() => setAutoSync((value) => !value)} role="switch" aria-checked={autoSync} aria-label="切换快照自动检查"><span /></button></label><div className="next-sync-note"><Clock3 size={13} />页面每 5 分钟检查 · GitHub 约每天 08:00 发布</div></div><div className="utility-modal-footer"><Settings size={14} /><span>设置会保存在本机浏览器中，刷新页面后仍然有效。</span></div></div></div>}
 
       {alertRulesOpen && <div className="modal-backdrop" onClick={() => setAlertRulesOpen(false)}><div className="utility-modal alert-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}><div className="modal-accent" /><div className="utility-modal-header"><div><div className="section-kicker">ALERT RULES</div><h2>告警规则</h2></div><button className="icon-button" onClick={() => setAlertRulesOpen(false)} aria-label="关闭告警规则" title="关闭告警规则"><X size={17} /></button></div><p className="alert-lead">只在值得打断你的时候提醒。规则保存在本机，默认不发送外部通知。</p><div className="alert-rule-list">{[["highImpact", "高影响事件", "影响等级为高时提醒"], ["official", "官方信源更新", "OpenAI、NVIDIA 等官方源出现新条目"], ["industry", "行业热点跃迁", "某行业热度指数单日明显上升"]].map(([key, title, description]) => <div className="alert-rule-row" key={key}><div><strong>{title}</strong><span>{description}</span></div><button className={`switch ${alertRules[key as keyof typeof alertRules] ? "on" : ""}`} onClick={() => setAlertRules((current) => ({ ...current, [key]: !current[key as keyof typeof current] }))} role="switch" aria-checked={alertRules[key as keyof typeof alertRules]} aria-label={`切换${title}`}><span /></button></div>)}</div><div className="utility-modal-footer"><Bell size={14} /><span>当前启用 {Object.values(alertRules).filter(Boolean).length} 条规则 · 仅在页面打开时提示</span></div></div></div>}
     </main>

@@ -1,0 +1,64 @@
+name: Deploy StormEye AI to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    # 00:00 UTC is 08:00 in China Standard Time (UTC+8).
+    - cron: "0 0 * * *"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+env:
+  NEXT_PUBLIC_BASE_PATH: /StormEyeAl-Global-AI-Powered-Incident-Monitoring-and-Fact-Tracking-Intelligence-System
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Restore previous snapshot
+        run: node scripts/restore-pages-snapshot.mjs
+        env:
+          PAGES_SNAPSHOT_URL: https://qiuy6797-bot.github.io/StormEyeAl-Global-AI-Powered-Incident-Monitoring-and-Fact-Tracking-Intelligence-System/data/feeds.json
+
+      - name: Build static site and snapshot
+        run: npm run build
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./out
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
