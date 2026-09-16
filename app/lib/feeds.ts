@@ -9,6 +9,8 @@ type RecordValue = Record<string, unknown>;
 type Article = { title: string; summary: string; url: string; date: string; id?: string };
 const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@_", textNodeName: "#text" });
 const MAX_AGE = 30 * 86400_000;
+const isStaticBuild = process.env.NEXT_PHASE === "phase-production-build" || process.env.STORMEYE_STATIC_BUILD === "1";
+const upstreamCache = isStaticBuild ? "force-cache" : "no-store";
 
 function text(value: unknown): string {
   if (typeof value === "string" || typeof value === "number") return String(value).trim();
@@ -113,7 +115,7 @@ async function fetchText(url: string, signal: AbortSignal): Promise<string> {
   const response = await fetch(url, {
     headers: { "User-Agent": "StormEyeAI/0.2 (public news reader)", Accept: "application/rss+xml, application/atom+xml, application/json, text/html;q=0.8, */*;q=0.5" },
     signal,
-    cache: "no-store",
+    cache: upstreamCache,
   });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   // Bound upstream payloads as well as connection time.
@@ -132,6 +134,19 @@ async function fetchText(url: string, signal: AbortSignal): Promise<string> {
     chunks.push(value);
   }
   return Buffer.concat(chunks).toString("utf8");
+}
+
+function compactSourceError(error: unknown, signal: AbortSignal): string {
+  if (signal.aborted) return "连接超时";
+  const message = error instanceof Error ? error.message : "请求失败";
+  const status = message.match(/\bHTTP\s+(\d{3})\b/i)?.[1];
+  if (status) return `请求受限 · HTTP ${status}`;
+  if (/dynamic\s*=|static|prerender|revalidate/i.test(message)) return "静态构建受限，沿用最近快照";
+  if (/fetch failed|enotfound|econnreset|econnrefused|network/i.test(message)) return "信源暂时不可达";
+  if (/订阅格式无效/.test(message)) return "订阅格式异常";
+  if (/未找到可解析文章|未能核对近期文章与日期/.test(message)) return "暂未找到可核验条目";
+  if (/响应超过大小限制/.test(message)) return "响应超过大小限制";
+  return message.replace(/https?:\/\/\S+/g, "").replace(/\s+/g, " ").trim().slice(0, 56) || "请求失败";
 }
 
 function articleMetadata(value: unknown, depth = 0): RecordValue | undefined {
@@ -247,7 +262,7 @@ export async function liveEvents(): Promise<{ events: FeedEvent[]; health: Sourc
       } catch (error) {
         row.status = "受限";
         row.freshness = "同步失败";
-        row.detail = signal.aborted ? "连接超时" : error instanceof Error ? error.message : "请求失败";
+        row.detail = compactSourceError(error, signal);
       }
       row.latency = `${((Date.now() - start) / 1000).toFixed(1)}s`;
     }

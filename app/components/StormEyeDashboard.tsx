@@ -242,11 +242,14 @@ function EventCard({ event, saved, onOpen, onSave }: {
 
 function SourceRow({ source }: { source: SourceHealth }) {
   const statusClass = source.status === "在线" ? "online" : source.status === "受限" ? "limited" : "pending";
+  const resultText = source.status === "在线"
+    ? `${source.eventCount} 条 · ${source.latency}`
+    : source.detail || source.freshness || "待同步";
   return (
-    <div className="source-row" title={source.detail}>
+    <div className="source-row" title={source.detail || resultText}>
       <span className={`source-status ${statusClass}`} aria-label={source.status} />
       <div className="source-name"><a href={source.home} target="_blank" rel="noreferrer"><strong>{source.name}</strong><ExternalLink size={12} /></a><span>{source.region} · {source.type}</span></div>
-      <div className="source-result"><strong className={`source-result-${statusClass}`}>{source.status}</strong><span>{source.status === "在线" ? `${source.eventCount} 条 · ${source.latency}` : source.detail || "待同步"}</span></div>
+      <div className="source-result"><strong className={`source-result-${statusClass}`}>{source.status}</strong><span title={resultText}>{resultText}</span></div>
     </div>
   );
 }

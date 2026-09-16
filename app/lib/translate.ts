@@ -22,6 +22,8 @@ const state: TranslationState = globals.stormeyeTranslations ??= {
 };
 const directory = process.env.STORMEYE_DATA_DIR ?? path.join(process.env.VERCEL ? os.tmpdir() : process.cwd(), ".stormeye");
 const cachePath = path.join(directory, "translations.json");
+const isStaticBuild = process.env.NEXT_PHASE === "phase-production-build" || process.env.STORMEYE_STATIC_BUILD === "1";
+const translationCache = isStaticBuild ? "force-cache" : "no-store";
 const keyFor = (value: string) => createHash("sha256").update(`zh-CN:v1:${value}`).digest("hex");
 
 export async function initializeTranslations() {
@@ -78,7 +80,7 @@ async function requestTranslation(value: string): Promise<Translation> {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ q: chunk, source: "en", target: "zh", format: "text", ...(process.env.STORMEYE_TRANSLATE_KEY ? { api_key: process.env.STORMEYE_TRANSLATE_KEY } : {}) }),
         signal: AbortSignal.timeout(10000),
-        cache: "no-store",
+        cache: translationCache,
       });
       if (!response.ok) throw new Error("Translation unavailable");
       const data = await response.json();
@@ -88,7 +90,7 @@ async function requestTranslation(value: string): Promise<Translation> {
       url.searchParams.set("q", chunk);
       url.searchParams.set("langpair", "en|zh-CN");
       if (process.env.STORMEYE_TRANSLATE_EMAIL) url.searchParams.set("de", process.env.STORMEYE_TRANSLATE_EMAIL);
-      const response = await fetch(url, { signal: AbortSignal.timeout(10000), cache: "no-store" });
+      const response = await fetch(url, { signal: AbortSignal.timeout(10000), cache: translationCache });
       if (response.status === 429) {
         state.blockedUntil = Date.now() + 3600_000;
         throw new Error("Translation quota reached");
