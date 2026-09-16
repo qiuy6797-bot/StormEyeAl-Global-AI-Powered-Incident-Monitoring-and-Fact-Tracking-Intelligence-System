@@ -132,6 +132,15 @@ test("translation deduplicates in-flight work and limits concurrency", async (t)
   assert.ok(maximum <= 4);
 });
 
+test("translation keeps an existing bilingual fallback when a new request fails", async (t) => {
+  t.mock.method(globalThis, "fetch", async () => { throw new Error("temporary translation outage"); });
+  const base = parseRss(rss(item()), official)[0];
+  const [event] = await translateEvents([{ ...base, title: "Fallback title for StormEye", titleZh: "StormEye 备用标题", summary: "Fallback summary for StormEye", summaryZh: "StormEye 备用摘要" }]);
+  assert.equal(event.titleZh, "StormEye 备用标题");
+  assert.equal(event.summaryZh, "StormEye 备用摘要");
+  assert.equal(event.translationStatus, "ready");
+});
+
 test("translation failures never masquerade as Chinese text", async (t) => {
   t.mock.method(globalThis, "fetch", async () => Response.json({ responseStatus: 200, responseData: { translatedText: "SERVICE UNAVAILABLE" } }));
   const base = parseRss(rss(item()), official)[0];

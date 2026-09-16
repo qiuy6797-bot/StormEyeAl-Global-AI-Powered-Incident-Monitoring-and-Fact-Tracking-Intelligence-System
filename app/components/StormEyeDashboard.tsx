@@ -168,16 +168,16 @@ function Sparkline() {
   );
 }
 
-function TranslationLine({ value, status, provider, title = false }: {
+function TranslationLine({ value, provider, title = false }: {
   value?: string;
-  status?: FeedEvent["translationStatus"];
   provider?: string;
   title?: boolean;
 }) {
+  if (!value) return null;
   return (
-    <div className={`translation-line ${title ? "translation-title" : ""} ${value ? "" : "translation-pending"}`} lang="zh-CN">
-      <span className="translation-label" title={provider ? `机器翻译 · ${provider} · 以原文为准` : "机器翻译"}>{value ? "中文 · 机器翻译" : "中文"}</span>
-      <p>{value || (status === "unavailable" || status === "partial" ? "中文翻译暂未生成，请以原文为准。" : "正在读取译文…")}</p>
+    <div className={`translation-line ${title ? "translation-title" : ""}`} lang="zh-CN">
+      <span className="translation-label" title={provider ? `机器翻译 · ${provider} · 以原文为准` : "机器翻译"}>中文 · 机器翻译</span>
+      <p>{value}</p>
     </div>
   );
 }
@@ -189,9 +189,9 @@ function EventContent({ event, detail = false }: { event: FeedEvent; detail?: bo
   return (
     <div className="bilingual-content">
       <Heading lang={titleNeedsTranslation ? "en" : undefined}>{event.title}</Heading>
-      {titleNeedsTranslation && <TranslationLine value={event.titleZh} status={event.translationStatus} provider={event.translationProvider} title />}
+      {titleNeedsTranslation && <TranslationLine value={event.titleZh} provider={event.translationProvider} title />}
       <p className={detail ? "modal-summary original-summary" : "original-summary"} lang={summaryNeedsTranslation ? "en" : undefined}>{event.summary}</p>
-      {summaryNeedsTranslation && <TranslationLine value={event.summaryZh} status={event.translationStatus} provider={event.translationProvider} />}
+      {summaryNeedsTranslation && <TranslationLine value={event.summaryZh} provider={event.translationProvider} />}
     </div>
   );
 }

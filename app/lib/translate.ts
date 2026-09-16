@@ -156,16 +156,18 @@ export async function translateEvents(events: FeedEvent[]): Promise<FeedEvent[]>
     const titleNeeded = event.sourceType !== "代码" && needsChineseTranslation(event.title);
     const summaryNeeded = needsChineseTranslation(event.summary);
     const [title, summary] = await Promise.all([
-      titleNeeded ? translateText(event.title) : undefined,
-      summaryNeeded ? translateText(event.summary) : undefined,
+      titleNeeded && !event.titleZh ? translateText(event.title) : undefined,
+      summaryNeeded && !event.summaryZh ? translateText(event.summary) : undefined,
     ]);
-    const complete = (!titleNeeded || title) && (!summaryNeeded || summary);
+    const titleZh = title?.text ?? event.titleZh;
+    const summaryZh = summary?.text ?? event.summaryZh;
+    const complete = (!titleNeeded || titleZh) && (!summaryNeeded || summaryZh);
     return {
       ...event,
-      titleZh: title?.text,
-      summaryZh: summary?.text,
-      translationProvider: title?.provider ?? summary?.provider,
-      translationStatus: complete ? "ready" as const : title || summary ? "partial" as const : "unavailable" as const,
+      titleZh,
+      summaryZh,
+      translationProvider: title?.provider ?? summary?.provider ?? event.translationProvider,
+      translationStatus: complete ? "ready" as const : titleZh || summaryZh ? "partial" as const : "unavailable" as const,
     };
   }));
   await persistTranslations();

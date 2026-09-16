@@ -57,6 +57,22 @@ async function persist(snapshot: FeedResponse) {
   }
 }
 
+function preserveTranslations(events: FeedResponse["events"], previous: FeedResponse["events"]): FeedResponse["events"] {
+  const byId = new Map(previous.map((event) => [event.id, event]));
+  const byUrl = new Map(previous.map((event) => [event.sourceUrl, event]));
+  return events.map((event) => {
+    const prior = byId.get(event.id) ?? byUrl.get(event.sourceUrl);
+    if (!prior || prior.title !== event.title || prior.summary !== event.summary) return event;
+    return {
+      ...event,
+      titleZh: event.titleZh ?? prior.titleZh,
+      summaryZh: event.summaryZh ?? prior.summaryZh,
+      translationStatus: event.translationStatus ?? prior.translationStatus,
+      translationProvider: event.translationProvider ?? prior.translationProvider,
+    };
+  });
+}
+
 async function refresh(): Promise<FeedResponse> {
   const checkedAt = new Date().toISOString();
   const result = await liveEvents().catch(() => ({
@@ -67,7 +83,8 @@ async function refresh(): Promise<FeedResponse> {
   const retained = (state.snapshot?.events ?? []).filter((event) =>
     failedSources.has(event.source) && Date.now() - Date.parse(event.publishedAt) < 30 * 86400_000,
   );
-  const events = deduplicateEvents([...result.events, ...retained]);
+  const previousEvents = state.snapshot?.events ?? [];
+  const events = preserveTranslations(deduplicateEvents([...result.events, ...retained]), previousEvents);
   const hasFreshData = result.events.length > 0;
   state.snapshot = {
     catalogVersion: sourceCatalogVersion,
