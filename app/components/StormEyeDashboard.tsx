@@ -2,6 +2,7 @@
 
 import {
   Activity,
+  ArrowUp,
   ArrowUpRight,
   Bell,
   Bookmark,
@@ -307,9 +308,10 @@ export default function StormEyeDashboard() {
   const [showSavedOnly, setShowSavedOnly] = useState(false);
   const [sortMode, setSortMode] = useState<"最新" | "影响" | "可信">("最新");
   const [theme, setTheme] = useState<"light" | "dark">("light");
-  const [fontScale, setFontScale] = useState<"standard" | "large">("large");
+  const [fontScale, setFontScale] = useState<"standard" | "large">("standard");
   const [autoSync, setAutoSync] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showBackToTop, setShowBackToTop] = useState(false);
   const [clock, setClock] = useState(new Date());
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const [page, setPage] = useState(1);
@@ -377,6 +379,12 @@ export default function StormEyeDashboard() {
     document.addEventListener("fullscreenchange", syncFullscreen);
     syncFullscreen();
     return () => document.removeEventListener("fullscreenchange", syncFullscreen);
+  }, []);
+  useEffect(() => {
+    const syncBackToTop = () => setShowBackToTop(window.scrollY > 520);
+    window.addEventListener("scroll", syncBackToTop, { passive: true });
+    syncBackToTop();
+    return () => window.removeEventListener("scroll", syncBackToTop);
   }, []);
 
   const filteredEvents = useMemo(() => {
@@ -448,6 +456,7 @@ export default function StormEyeDashboard() {
       setMessage("当前浏览器未允许进入全屏模式。");
     }
   };
+  const scrollToTop = () => window.scrollTo({ top: 0, behavior: "smooth" });
 
   return (
     <main className={`app-shell font-${fontScale}`}>
@@ -529,6 +538,7 @@ export default function StormEyeDashboard() {
           </section>
           <footer className="app-footer"><span>{APP_NAME} · 情报不是越多越好，是越可验证越好。</span><span className="footer-right"><span>数据策略：公开信源优先</span><span className="footer-dot">·</span><span>更新时间 {formatSyncTime(generatedAt)}</span></span></footer>
         </div>
+        {showBackToTop && <button className="back-to-top-button" onClick={scrollToTop} aria-label="回到顶部" title="回到顶部"><ArrowUp size={18} /></button>}
       </section>
 
       {selectedEvent && <div className="modal-backdrop" onClick={() => setSelectedEvent(null)}><div className="event-modal" role="dialog" aria-modal="true" aria-label="事件详情" onClick={(event) => event.stopPropagation()}><div className="modal-accent" /><div className="modal-header"><div className="event-breadcrumb"><span className={`kind-dot ${kindClass(selectedEvent.kind)}`} /><span className={`kind-label ${kindClass(selectedEvent.kind)}`}>{selectedEvent.kind}</span><span className="dot-divider">·</span><span>{selectedEvent.source}</span></div><button className="icon-button" onClick={() => setSelectedEvent(null)} aria-label="关闭详情" title="关闭详情"><X size={17} /></button></div><EventContent event={events.find((event) => event.id === selectedEvent.id) ?? selectedEvent} detail /><div className="modal-facts"><div><span>事实状态</span><strong>{selectedEvent.confidence}</strong></div><div><span>影响等级</span><strong>{selectedEvent.impact}影响</strong></div><div><span>行业分类</span><strong>{selectedEvent.industry}</strong></div><div><span>发布时间</span><strong>{formatDateTime(selectedEvent.publishedAt)}</strong></div></div><div className="modal-tags">{selectedEvent.tags.map((tag) => <span key={tag} className="event-tag">{tag}</span>)}</div><div className="modal-footer"><span className="modal-note"><ShieldCheck size={14} />机器译文仅供参考，事实以原始信源为准</span><a href={selectedEvent.sourceUrl} target="_blank" rel="noreferrer" className="source-link">查看原始信源<ExternalLink size={14} /></a></div></div></div>}
