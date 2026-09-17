@@ -602,6 +602,18 @@ h1 {
 
 html:fullscreen {
   background: var(--paper);
+  scrollbar-width: none;
+}
+
+html:fullscreen body {
+  scrollbar-width: none;
+}
+
+html:fullscreen::-webkit-scrollbar,
+html:fullscreen body::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 html:fullscreen .app-shell {
