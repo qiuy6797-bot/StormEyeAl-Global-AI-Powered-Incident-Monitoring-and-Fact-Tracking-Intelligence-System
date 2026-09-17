@@ -486,6 +486,57 @@ h1 {
   gap: 8px;
 }
 
+.quick-appearance-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 34px;
+  padding: 3px;
+  border: 1px solid #dbe5e9;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.56);
+}
+
+.appearance-control-label {
+  padding: 0 5px 0 6px;
+  color: #7f909b;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.appearance-theme-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 26px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: #81909a;
+  background: transparent;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  transition: color 140ms ease, background 140ms ease, border-color 140ms ease;
+}
+
+.appearance-theme-button:hover {
+  border-color: #cfe1e5;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.appearance-theme-button.selected {
+  border-color: #bfe1e6;
+  color: var(--cyan-deep);
+  background: #e8f8fa;
+}
+
+.appearance-theme-button.selected svg {
+  color: var(--cyan);
+}
+
 .keyboard-hint {
   gap: 5px;
   padding: 5px 7px;
@@ -517,6 +568,14 @@ h1 {
   border: 1px solid #f9fbfc;
   border-radius: 50%;
   background: var(--orange);
+}
+
+html:fullscreen {
+  background: var(--paper);
+}
+
+html:fullscreen .app-shell {
+  min-height: 100vh;
 }
 
 .mobile-menu-button {
@@ -2298,6 +2357,28 @@ html[data-theme="dark"] .topbar {
   background: rgba(10, 22, 31, 0.74);
 }
 
+html[data-theme="dark"] .quick-appearance-control {
+  border-color: #213946;
+  background: #0f1f2a;
+}
+
+html[data-theme="dark"] .appearance-control-label,
+html[data-theme="dark"] .appearance-theme-button {
+  color: #9aadb6;
+}
+
+html[data-theme="dark"] .appearance-theme-button:hover {
+  border-color: #294551;
+  color: var(--ink-strong);
+  background: #132832;
+}
+
+html[data-theme="dark"] .appearance-theme-button.selected {
+  border-color: #2c6572;
+  color: var(--cyan);
+  background: #123740;
+}
+
 html[data-theme="dark"] .live-pulse,
 html[data-theme="dark"] .nav-item.active,
 html[data-theme="dark"] .status-primary,
@@ -3481,6 +3562,26 @@ html[data-theme="dark"] .sidebar-rule {
 
   .topbar-actions {
     margin-left: auto;
+  }
+
+  .quick-appearance-control {
+    gap: 1px;
+    min-height: 32px;
+    padding: 2px;
+  }
+
+  .appearance-control-label {
+    padding: 0 4px;
+    font-size: 10px;
+  }
+
+  .appearance-theme-button {
+    min-height: 26px;
+    padding: 0 7px;
+  }
+
+  .appearance-theme-label {
+    display: none;
   }
 
   .status-primary,

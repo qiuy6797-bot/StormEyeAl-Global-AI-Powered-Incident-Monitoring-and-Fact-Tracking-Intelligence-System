@@ -18,7 +18,9 @@ import {
   Globe2,
   Layers3,
   ListFilter,
+  Maximize2,
   Menu,
+  Minimize2,
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
@@ -307,6 +309,7 @@ export default function StormEyeDashboard() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [fontScale, setFontScale] = useState<"standard" | "large">("large");
   const [autoSync, setAutoSync] = useState(true);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [clock, setClock] = useState(new Date());
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const [page, setPage] = useState(1);
@@ -369,6 +372,12 @@ export default function StormEyeDashboard() {
     }, 5 * 60_000);
     return () => window.clearInterval(timer);
   }, [autoSync]);
+  useEffect(() => {
+    const syncFullscreen = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener("fullscreenchange", syncFullscreen);
+    syncFullscreen();
+    return () => document.removeEventListener("fullscreenchange", syncFullscreen);
+  }, []);
 
   const filteredEvents = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -431,6 +440,14 @@ export default function StormEyeDashboard() {
     setSortMode("最新");
     setQuery("");
   };
+  const toggleFullscreen = async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await document.documentElement.requestFullscreen();
+    } catch {
+      setMessage("当前浏览器未允许进入全屏模式。");
+    }
+  };
 
   return (
     <main className={`app-shell font-${fontScale}`}>
@@ -464,7 +481,19 @@ export default function StormEyeDashboard() {
       <section className={`main-panel ${sidebarCollapsed ? "sidebar-is-collapsed" : ""}`}>
         <header className="topbar">
           <div className="topbar-left"><button className="icon-button mobile-menu-button" onClick={() => setMobileNavOpen((value) => !value)} aria-label="打开导航" title="打开导航"><Menu size={19} /></button><div><div className="eyebrow"><span className="eyebrow-line" />GLOBAL AI INTELLIGENCE</div><h1>全球 AI 事件监测与事实追踪情报系统</h1></div></div>
-          <div className="topbar-actions"><div className="keyboard-hint"><Command size={13} /><span>K</span></div><button className={`icon-button ${helpOpen ? "active-icon" : ""}`} aria-label="打开使用帮助" title="使用帮助" onClick={() => { setHelpOpen(true); setSettingsOpen(false); }}><CircleHelp size={17} /></button><button className={`icon-button ${settingsOpen ? "active-icon" : ""}`} aria-label="打开设置" title="设置" onClick={() => { setSettingsOpen(true); setHelpOpen(false); }}><Settings size={17} /></button><button className={`icon-button alert-button ${watching ? "watching" : ""}`} aria-label={watching ? "关闭告警监听" : "开启告警监听"} title={watching ? "关闭告警监听" : "开启告警监听"} onClick={() => setWatching((value) => !value)}><Bell size={17} fill={watching ? "currentColor" : "none"} />{watching && <span className="notification-dot" />}</button><div className="topbar-avatar">LH</div></div>
+          <div className="topbar-actions">
+            <div className="quick-appearance-control" role="group" aria-label="外观主题">
+              <span className="appearance-control-label">外观</span>
+              <button className={`appearance-theme-button ${theme === "light" ? "selected" : ""}`} onClick={() => setTheme("light")} aria-pressed={theme === "light"} title="切换为浅色模式"><Sun size={15} /><span className="appearance-theme-label">浅色</span></button>
+              <button className={`appearance-theme-button ${theme === "dark" ? "selected" : ""}`} onClick={() => setTheme("dark")} aria-pressed={theme === "dark"} title="切换为深色模式"><Moon size={15} /><span className="appearance-theme-label">深色</span></button>
+            </div>
+            <button className={`icon-button ${isFullscreen ? "active-icon" : ""}`} aria-label={isFullscreen ? "退出全屏" : "进入全屏"} title={isFullscreen ? "退出全屏" : "进入全屏"} onClick={() => void toggleFullscreen()}>{isFullscreen ? <Minimize2 size={17} /> : <Maximize2 size={17} />}</button>
+            <div className="keyboard-hint"><Command size={13} /><span>K</span></div>
+            <button className={`icon-button ${helpOpen ? "active-icon" : ""}`} aria-label="打开使用帮助" title="使用帮助" onClick={() => { setHelpOpen(true); setSettingsOpen(false); }}><CircleHelp size={17} /></button>
+            <button className={`icon-button ${settingsOpen ? "active-icon" : ""}`} aria-label="打开设置" title="设置" onClick={() => { setSettingsOpen(true); setHelpOpen(false); }}><Settings size={17} /></button>
+            <button className={`icon-button alert-button ${watching ? "watching" : ""}`} aria-label={watching ? "关闭告警监听" : "开启告警监听"} title={watching ? "关闭告警监听" : "开启告警监听"} onClick={() => setWatching((value) => !value)}><Bell size={17} fill={watching ? "currentColor" : "none"} />{watching && <span className="notification-dot" />}</button>
+            <div className="topbar-avatar">LH</div>
+          </div>
         </header>
 
         <div className="content">
@@ -504,11 +533,11 @@ export default function StormEyeDashboard() {
 
       {selectedEvent && <div className="modal-backdrop" onClick={() => setSelectedEvent(null)}><div className="event-modal" role="dialog" aria-modal="true" aria-label="事件详情" onClick={(event) => event.stopPropagation()}><div className="modal-accent" /><div className="modal-header"><div className="event-breadcrumb"><span className={`kind-dot ${kindClass(selectedEvent.kind)}`} /><span className={`kind-label ${kindClass(selectedEvent.kind)}`}>{selectedEvent.kind}</span><span className="dot-divider">·</span><span>{selectedEvent.source}</span></div><button className="icon-button" onClick={() => setSelectedEvent(null)} aria-label="关闭详情" title="关闭详情"><X size={17} /></button></div><EventContent event={events.find((event) => event.id === selectedEvent.id) ?? selectedEvent} detail /><div className="modal-facts"><div><span>事实状态</span><strong>{selectedEvent.confidence}</strong></div><div><span>影响等级</span><strong>{selectedEvent.impact}影响</strong></div><div><span>行业分类</span><strong>{selectedEvent.industry}</strong></div><div><span>发布时间</span><strong>{formatDateTime(selectedEvent.publishedAt)}</strong></div></div><div className="modal-tags">{selectedEvent.tags.map((tag) => <span key={tag} className="event-tag">{tag}</span>)}</div><div className="modal-footer"><span className="modal-note"><ShieldCheck size={14} />机器译文仅供参考，事实以原始信源为准</span><a href={selectedEvent.sourceUrl} target="_blank" rel="noreferrer" className="source-link">查看原始信源<ExternalLink size={14} /></a></div></div></div>}
 
-      {helpOpen && <div className="modal-backdrop" onClick={() => setHelpOpen(false)}><div className="utility-modal help-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}><div className="modal-accent" /><div className="utility-modal-header"><div><div className="section-kicker">QUICK GUIDE</div><h2>怎么用 StormEye</h2></div><button className="icon-button" onClick={() => setHelpOpen(false)} aria-label="关闭帮助" title="关闭帮助"><X size={17} /></button></div><div className="guide-list"><div><strong>1</strong><span>点事件卡片查看摘要、事实状态和原始信源。</span></div><div><strong>2</strong><span>用行业筛选观察基础模型、机器人、金融、能源等赛道。</span></div><div><strong>3</strong><span>收藏重要事件，左侧“我的收藏”只保留你的关注项。</span></div><div><strong>4</strong><span>设置可切换深色模式、字号和静态快照自动检查。</span></div></div><div className="utility-modal-footer"><ShieldCheck size={14} /><span>事实状态是公开信源的交叉结果，不替代人工判断。</span></div></div></div>}
+      {helpOpen && <div className="modal-backdrop" onClick={() => setHelpOpen(false)}><div className="utility-modal help-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}><div className="modal-accent" /><div className="utility-modal-header"><div><div className="section-kicker">QUICK GUIDE</div><h2>怎么用 StormEye</h2></div><button className="icon-button" onClick={() => setHelpOpen(false)} aria-label="关闭帮助" title="关闭帮助"><X size={17} /></button></div><div className="guide-list"><div><strong>1</strong><span>点事件卡片查看摘要、事实状态和原始信源。</span></div><div><strong>2</strong><span>用行业筛选观察基础模型、机器人、金融、能源等赛道。</span></div><div><strong>3</strong><span>收藏重要事件，左侧“我的收藏”只保留你的关注项。</span></div><div><strong>4</strong><span>顶部可直接切换外观，设置中可调整字号和快照检查。</span></div></div><div className="utility-modal-footer"><ShieldCheck size={14} /><span>事实状态是公开信源的交叉结果，不替代人工判断。</span></div></div></div>}
 
       {briefOpen && <div className="modal-backdrop" onClick={() => setBriefOpen(false)}><div className="utility-modal brief-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}><div className="modal-accent" /><div className="utility-modal-header"><div><div className="section-kicker">DAILY BRIEF · {formatSyncTime(generatedAt)}</div><h2>今天的风向</h2></div><button className="icon-button" onClick={() => setBriefOpen(false)} aria-label="关闭简报" title="关闭简报"><X size={17} /></button></div><p className="brief-modal-lead">Agent 正在从“会回答”走向“能交付”。今天值得追踪的，不只是模型发布，而是谁把上下文、工具权限和失败恢复真正做成了产品。</p><div className="brief-highlights">{[["01", "Agent 工程化", "运行时、评测和可观测性正在成为落地差异。"], ["02", "推理成本", "每一个 token 都开始进入产品经理和财务的视野。"], ["03", "可信信息", "多源交叉与原始信源，比转发速度更值得下注。"]].map(([index, title, copy]) => <div key={index}><span>{index}</span><strong>{title}</strong><p>{copy}</p></div>)}</div></div></div>}
 
-      {settingsOpen && <div className="modal-backdrop" onClick={() => setSettingsOpen(false)}><div className="utility-modal settings-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}><div className="modal-accent" /><div className="utility-modal-header"><div><div className="section-kicker">WORKSPACE SETTINGS</div><h2>工作台设置</h2></div><button className="icon-button" onClick={() => setSettingsOpen(false)} aria-label="关闭设置" title="关闭设置"><X size={17} /></button></div><div className="settings-section"><div className="settings-label"><span className="settings-label-icon"><Sun size={15} /></span><div><strong>外观主题</strong><span>选择你更舒服的观察环境</span></div></div><div className="segmented-control"><button className={theme === "light" ? "selected" : ""} onClick={() => setTheme("light")}><Sun size={14} />浅色</button><button className={theme === "dark" ? "selected" : ""} onClick={() => setTheme("dark")}><Moon size={14} />深色</button></div></div><div className="settings-section"><div className="settings-label"><span className="settings-label-icon"><Type size={15} /></span><div><strong>阅读字号</strong><span>适合长时间浏览事件流</span></div></div><div className="segmented-control"><button className={fontScale === "standard" ? "selected" : ""} onClick={() => setFontScale("standard")}>标准</button><button className={fontScale === "large" ? "selected" : ""} onClick={() => setFontScale("large")}>舒适</button></div></div><div className="settings-section sync-setting"><div className="settings-label"><span className="settings-label-icon"><RefreshCw size={15} /></span><div><strong>快照自动检查</strong><span>页面打开时定时读取已发布内容</span></div></div><label className="switch-row"><span>{autoSync ? "已开启" : "已暂停"}</span><button className={`switch ${autoSync ? "on" : ""}`} onClick={() => setAutoSync((value) => !value)} role="switch" aria-checked={autoSync} aria-label="切换快照自动检查"><span /></button></label><div className="next-sync-note"><Clock3 size={13} />页面每 5 分钟检查 · GitHub 约每天 08:00 发布</div></div><div className="utility-modal-footer"><Settings size={14} /><span>设置会保存在本机浏览器中，刷新页面后仍然有效。</span></div></div></div>}
+      {settingsOpen && <div className="modal-backdrop" onClick={() => setSettingsOpen(false)}><div className="utility-modal settings-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}><div className="modal-accent" /><div className="utility-modal-header"><div><div className="section-kicker">WORKSPACE SETTINGS</div><h2>工作台设置</h2></div><button className="icon-button" onClick={() => setSettingsOpen(false)} aria-label="关闭设置" title="关闭设置"><X size={17} /></button></div><div className="settings-section"><div className="settings-label"><span className="settings-label-icon"><Type size={15} /></span><div><strong>阅读字号</strong><span>适合长时间浏览事件流</span></div></div><div className="segmented-control"><button className={fontScale === "standard" ? "selected" : ""} onClick={() => setFontScale("standard")}>标准</button><button className={fontScale === "large" ? "selected" : ""} onClick={() => setFontScale("large")}>舒适</button></div></div><div className="settings-section sync-setting"><div className="settings-label"><span className="settings-label-icon"><RefreshCw size={15} /></span><div><strong>快照自动检查</strong><span>页面打开时定时读取已发布内容</span></div></div><label className="switch-row"><span>{autoSync ? "已开启" : "已暂停"}</span><button className={`switch ${autoSync ? "on" : ""}`} onClick={() => setAutoSync((value) => !value)} role="switch" aria-checked={autoSync} aria-label="切换快照自动检查"><span /></button></label><div className="next-sync-note"><Clock3 size={13} />页面每 5 分钟检查 · GitHub 约每天 08:00 发布</div></div><div className="utility-modal-footer"><Settings size={14} /><span>设置会保存在本机浏览器中，刷新页面后仍然有效。</span></div></div></div>}
 
       {alertRulesOpen && <div className="modal-backdrop" onClick={() => setAlertRulesOpen(false)}><div className="utility-modal alert-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}><div className="modal-accent" /><div className="utility-modal-header"><div><div className="section-kicker">ALERT RULES</div><h2>告警规则</h2></div><button className="icon-button" onClick={() => setAlertRulesOpen(false)} aria-label="关闭告警规则" title="关闭告警规则"><X size={17} /></button></div><p className="alert-lead">只在值得打断你的时候提醒。规则保存在本机，默认不发送外部通知。</p><div className="alert-rule-list">{[["highImpact", "高影响事件", "影响等级为高时提醒"], ["official", "官方信源更新", "OpenAI、NVIDIA 等官方源出现新条目"], ["industry", "行业热点跃迁", "某行业热度指数单日明显上升"]].map(([key, title, description]) => <div className="alert-rule-row" key={key}><div><strong>{title}</strong><span>{description}</span></div><button className={`switch ${alertRules[key as keyof typeof alertRules] ? "on" : ""}`} onClick={() => setAlertRules((current) => ({ ...current, [key]: !current[key as keyof typeof current] }))} role="switch" aria-checked={alertRules[key as keyof typeof alertRules]} aria-label={`切换${title}`}><span /></button></div>)}</div><div className="utility-modal-footer"><Bell size={14} /><span>当前启用 {Object.values(alertRules).filter(Boolean).length} 条规则 · 仅在页面打开时提示</span></div></div></div>}
     </main>
